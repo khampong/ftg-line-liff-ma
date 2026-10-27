@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: forklift-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: forklift
+      POSTGRES_PASSWORD: forklift
+      POSTGRES_DB: forklift_repair
+    ports:
+      - "5434:5432"
+    volumes:
+      - forklift-postgres-dev-data:/var/lib/postgresql/data
+
+volumes:
+  forklift-postgres-dev-data:

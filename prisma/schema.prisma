@@ -1,0 +1,192 @@
+// Prisma schema — ระบบแจ้งซ่อมโฟล์คลิฟท์
+// อ้างอิง .kiro/specs/forklift-repair/design.md > Data Models (ER Diagram)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum UserRole {
+  ADMIN
+  TECHNICIAN
+  MANAGER
+}
+
+enum TicketStatus {
+  NEW
+  ACCEPTED
+  IN_PROGRESS
+  REPAIRED
+  CLOSED
+  CANCELLED
+}
+
+enum SymptomCategory {
+  ENGINE_NO_START // เครื่องยนต์/สตาร์ทไม่ติด
+  LIFT_FAIL // ระบบยก/ยกไม่ขึ้น
+  BRAKE // เบรก
+  ELECTRICAL // ระบบไฟฟ้า/ไฟเตือน
+  TIRE_WHEEL // ยาง/ล้อ
+  HYDRAULIC // ระบบไฮดรอลิก/น้ำมันรั่ว
+  OTHER // อื่นๆ (บังคับกรอก description)
+}
+
+enum AttachmentType {
+  REPORT // รูปที่ลูกค้าแนบตอนแจ้งซ่อม
+  REPAIR // รูปที่ช่างแนบหลังซ่อม
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  passwordHash String
+  displayName  String
+  role         UserRole
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedTickets  Ticket[]        @relation("TicketAssignee")
+  ticketHistories  TicketHistory[] @relation("TicketHistoryActor")
+
+  @@map("users")
+}
+
+model Customer {
+  id          String   @id @default(uuid())
+  name        String
+  contactName String?
+  phone       String?
+  address     String?
+  location    String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assets  Asset[]
+  tickets Ticket[]
+
+  @@map("customers")
+}
+
+model Asset {
+  id         String   @id @default(uuid())
+  customerId String
+  assetCode  String   @unique
+  model      String?
+  serialNo   String?
+  location   String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id])
+
+  qrTokens AssetQrToken[]
+  tickets  Ticket[]
+
+  @@index([customerId])
+  @@map("assets")
+}
+
+/// token ที่ฝังใน QR code (opaque, non-guessable)
+/// แยกจาก assetCode เพื่อให้ rotate/revoke ได้โดยไม่กระทบข้อมูลรถ (Req 5.2, 5.4)
+model AssetQrToken {
+  id        String    @id @default(uuid())
+  assetId   String
+  token     String    @unique
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@index([assetId])
+  @@index([token, active])
+  @@map("asset_qr_tokens")
+}
+
+model Ticket {
+  id         String   @id @default(uuid())
+  ticketNo   String   @unique
+  assetId    String
+  customerId String // denormalized จาก asset ตอนสร้าง (Req: รักษาบริบทแม้รถถูกย้ายเจ้าของภายหลัง)
+  assigneeId String?
+
+  // ข้อมูลผู้แจ้งจาก LINE profile (Req 1.4)
+  lineUserId      String
+  reporterName    String?
+  reporterPicture String?
+
+  symptomCategories SymptomCategory[]
+  description       String? // รายละเอียดเพิ่มเติม / บังคับกรอกถ้าเลือก OTHER
+
+  status TicketStatus @default(NEW)
+
+  repairNote String? // บันทึกผลการซ่อม (บังคับก่อนเปลี่ยนเป็น REPAIRED)
+
+  reportedAt DateTime  @default(now())
+  acceptedAt DateTime?
+  repairedAt DateTime?
+  closedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  asset    Asset     @relation(fields: [assetId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  assignee User?     @relation("TicketAssignee", fields: [assigneeId], references: [id])
+
+  attachments TicketAttachment[]
+  history     TicketHistory[]
+
+  @@index([assetId])
+  @@index([customerId])
+  @@index([assigneeId])
+  @@index([status])
+  @@index([reportedAt])
+  @@map("tickets")
+}
+
+model TicketAttachment {
+  id        String         @id @default(uuid())
+  ticketId  String
+  type      AttachmentType
+  filePath  String // path ของไฟล์บน PVC (ชื่อไฟล์สุ่ม)
+  mimeType  String
+  size      Int
+  createdAt DateTime       @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_attachments")
+}
+
+model TicketHistory {
+  id          String   @id @default(uuid())
+  ticketId    String
+  actorUserId String?
+  fromStatus  TicketStatus?
+  toStatus    TicketStatus
+  note        String?
+  createdAt   DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("TicketHistoryActor", fields: [actorUserId], references: [id])
+
+  @@index([ticketId])
+  @@map("ticket_history")
+}

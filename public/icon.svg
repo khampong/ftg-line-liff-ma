@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <rect width="32" height="32" rx="8" fill="#5d87ff"/>
+  <!-- Forklift body -->
+  <rect x="6" y="14" width="14" height="8" rx="1.5" fill="white"/>
+  <!-- Mast vertical -->
+  <rect x="18" y="7" width="3" height="15" rx="1" fill="white"/>
+  <!-- Forks -->
+  <rect x="20" y="18" width="7" height="2" rx="1" fill="white"/>
+  <rect x="20" y="21" width="7" height="2" rx="1" fill="white"/>
+  <!-- Wheels -->
+  <circle cx="10" cy="23" r="2.5" fill="white"/>
+  <circle cx="17" cy="23" r="2.5" fill="white"/>
+  <!-- Operator cab -->
+  <rect x="7" y="11" width="7" height="4" rx="1" fill="rgba(255,255,255,0.5)"/>
+</svg>
